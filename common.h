@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#define APP_VERSION   "1.0.0.26101"
+#define APP_VERSION   "1.0.1.26102"
 #define WIDEN2(x) L##x
 #define WIDEN(x) WIDEN2(x)
 #define APP_VERSION_W WIDEN(APP_VERSION)

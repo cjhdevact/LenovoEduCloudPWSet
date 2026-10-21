@@ -1,6 +1,6 @@
-﻿#include "common.h"
+﻿#include <windows.h>
+#include "common.h"
 
-#include <windows.h>
 #include <commctrl.h>
 #include <shlobj.h>
 #include <string>
@@ -27,10 +27,12 @@ static HWND g_hEditPath = NULL;
 static HWND g_hEditOutput = NULL;
 static HINSTANCE g_hInst = NULL;
 static HFONT g_hFont = NULL;
+static wchar_t g_dlg_buf[256] = {0};
 
 // ---------- UI 辅助 ----------
 
 static void append_output(const std::wstring& text) {
+    if (!g_hEditOutput || !IsWindow(g_hEditOutput)) return;
     int len = GetWindowTextLengthW(g_hEditOutput);
     SendMessageW(g_hEditOutput, EM_SETSEL, len, len);
     std::wstring with_nl = text + L"\r\n";
@@ -38,10 +40,12 @@ static void append_output(const std::wstring& text) {
 }
 
 static void clear_output() {
+    if (!g_hEditOutput || !IsWindow(g_hEditOutput)) return;
     SetWindowTextW(g_hEditOutput, L"");
 }
 
 static std::wstring get_selected_path() {
+    if (!g_hEditPath || !IsWindow(g_hEditPath)) return L"";
     int len = GetWindowTextLengthW(g_hEditPath);
     if (len <= 0) return L"";
     std::vector<wchar_t> buf(len + 1);
@@ -84,6 +88,8 @@ static bool ensure_path_selected() {
 // ---------- 输入密码对话框 ----------
 
 static bool prompt_password(HWND hWnd, std::wstring& out) {
+    g_dlg_buf[0] = 0;
+
     struct InputDlg {
         static LRESULT CALLBACK Proc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             static HWND hEdit = NULL;
@@ -118,19 +124,17 @@ static bool prompt_password(HWND hWnd, std::wstring& out) {
             }
             case WM_COMMAND:
                 if (LOWORD(wParam) == IDOK) {
-                    wchar_t buf[256] = {0};
-                    GetWindowTextW(hEdit, buf, 256);
-                    SetWindowTextW(GetParent(hWnd), buf);
+                    GetWindowTextW(hEdit, g_dlg_buf, 256);
                     DestroyWindow(hWnd);
                     return 0;
                 } else if (LOWORD(wParam) == IDCANCEL) {
-                    SetWindowTextW(GetParent(hWnd), L"");
+                    g_dlg_buf[0] = 0;
                     DestroyWindow(hWnd);
                     return 0;
                 }
                 return 0;
             case WM_CLOSE:
-                SetWindowTextW(GetParent(hWnd), L"");
+                g_dlg_buf[0] = 0;
                 DestroyWindow(hWnd);
                 return 0;
             }
@@ -152,9 +156,6 @@ static bool prompt_password(HWND hWnd, std::wstring& out) {
         registered = true;
     }
 
-    HWND hParent = CreateWindowExW(0, L"STATIC", L"", WS_POPUP,
-                                   0, 0, 0, 0, NULL, NULL, g_hInst, NULL);
-
     RECT rcParent;
     GetWindowRect(hWnd, &rcParent);
     int dlgW = 380;
@@ -167,7 +168,12 @@ static bool prompt_password(HWND hWnd, std::wstring& out) {
         L"PWInputDlg", L"重置密码",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
         dlgX, dlgY, dlgW, dlgH,
-        hParent, NULL, g_hInst, NULL);
+        hWnd, NULL, g_hInst, NULL);
+
+    if (!hDlg) {
+        MessageBoxW(hWnd, L"创建输入框失败", L"错误", MB_OK | MB_ICONERROR);
+        return false;
+    }
 
     EnableWindow(hWnd, FALSE);
 
@@ -183,11 +189,7 @@ static bool prompt_password(HWND hWnd, std::wstring& out) {
     EnableWindow(hWnd, TRUE);
     SetActiveWindow(hWnd);
 
-    wchar_t result[256] = {0};
-    GetWindowTextW(hParent, result, 256);
-    DestroyWindow(hParent);
-
-    out = result;
+    out = g_dlg_buf;
     return !out.empty();
 }
 
@@ -211,6 +213,7 @@ static void on_browse(HWND hWnd) {
 }
 
 static void on_reset_password(HWND hWnd) {
+    clear_output();
     if (!ensure_path_selected()) return;
 
     std::wstring dir = get_selected_path();
@@ -228,27 +231,24 @@ static void on_reset_password(HWND hWnd) {
     std::wstring newpwd;
     if (!prompt_password(hWnd, newpwd)) return;
 
-    clear_output();
-
     try {
         std::vector<unsigned char> pub_der = load_bin_file(pub_path);
         std::string password = wstring_to_utf8(newpwd);
         std::vector<unsigned char> cipher = cng_encrypt(pub_der, password);
         std::string hex = bytes_to_hex(cipher);
-        write_file_w(out_path, hex + "\n", false);
+        write_file_w(out_path, hex + "\n", true);
 
         append_output(L"重置密码成功");
-        append_output(L"公钥: wfbspubkey.bin");
         append_output(L"新密码: " + newpwd);
         append_output(L"已写入: wfpwd.bin");
     } catch (const std::exception& ex) {
         std::string msg = ex.what();
         MessageBoxA(hWnd, msg.c_str(), "重置密码失败", MB_OK | MB_ICONERROR);
-        append_output(L"重置密码失败: " + std::wstring(msg.begin(), msg.end()));
     }
 }
 
 static void on_read_password(HWND hWnd) {
+    clear_output();
     if (!ensure_path_selected()) return;
     std::wstring dir = get_selected_path();
     std::wstring pri_path = join_path(dir, L"wfbsprikey.bin");
@@ -265,8 +265,6 @@ static void on_read_password(HWND hWnd) {
         return;
     }
 
-    clear_output();
-
     try {
         std::vector<unsigned char> pri_der = load_bin_file(pri_path);
         std::vector<unsigned char> cipher = load_bin_file(in_path);
@@ -278,11 +276,11 @@ static void on_read_password(HWND hWnd) {
     } catch (const std::exception& ex) {
         std::string msg = ex.what();
         MessageBoxA(hWnd, msg.c_str(), "读取密码失败", MB_OK | MB_ICONERROR);
-        append_output(L"读取密码失败: " + std::wstring(msg.begin(), msg.end()));
     }
 }
 
 static void on_username(HWND hWnd) {
+    clear_output();
     if (!ensure_path_selected()) return;
     std::wstring dir = get_selected_path();
     std::wstring ini_path = join_path(dir, L"BSSvrCfg.ini");
@@ -293,12 +291,9 @@ static void on_username(HWND hWnd) {
         return;
     }
 
-    clear_output();
-
     try {
         std::string user = read_mag_username(ini_path);
         if (user.empty()) {
-            append_output(L"未找到 MagUserName 或值为空");
             MessageBoxW(hWnd, L"未找到 MagUserName 或值为空。", L"提示", MB_OK | MB_ICONWARNING);
             return;
         }
@@ -306,7 +301,6 @@ static void on_username(HWND hWnd) {
     } catch (const std::exception& ex) {
         std::string msg = ex.what();
         MessageBoxA(hWnd, msg.c_str(), "读取失败", MB_OK | MB_ICONERROR);
-        append_output(L"读取失败: " + std::wstring(msg.begin(), msg.end()));
     }
 }
 

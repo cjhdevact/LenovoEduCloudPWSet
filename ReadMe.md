@@ -15,7 +15,6 @@ LenovoEduCloudPWSet -e -p <password> [-k <pubkey.bin>] [-o <wfpwd.bin>]
 LenovoEduCloudPWSet -d [-i <wfpwd.bin>] [-k <prikey.bin>] [-o <wfpwd.bin>]
 读取管理员用户名
 LenovoEduCloudPWSet -u [-c <BSSvrCfg.ini>]
-
 ```
 不指定 `-k` / `-i` / `-o` / `-c` 时，使用当前目录默认文件。
 
