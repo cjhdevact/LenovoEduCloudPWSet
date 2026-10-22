@@ -340,7 +340,7 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
             L"微软雅黑");
 
-        HWND hTitle1 = CreateWindowW(L"STATIC", L"联想云教室控制台密码重置工具 Made by CJH.",
+        HWND hTitle1 = CreateWindowW(L"STATIC", L"联想云教室控制台密码重置工具",
                       WS_CHILD | WS_VISIBLE,
                       15, 12, 580, 20, hWnd, (HMENU)IDC_STATIC_TITLE, g_hInst, NULL);
 

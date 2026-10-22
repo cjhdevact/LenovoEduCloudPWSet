@@ -25,7 +25,6 @@ static void print_usage() {
 
 int wmain(int argc, wchar_t** argv) {
     std::cout << "LenovoEduCloudPWSet " << APP_VERSION << "\n";
-    std::cout << "Made by CJH.\n";
     std::cout << "Github: https://github.com/cjhdevact/LenovoEduCloudPWSet\n\n";
 
     std::vector<std::wstring> wargs;
