@@ -20,6 +20,7 @@
 #define IDC_BTN_DECRYPT     1004
 #define IDC_BTN_USERNAME    1005
 #define IDC_EDIT_OUTPUT     1006
+#define IDC_CHECK_TOPMOST   1007
 
 // ---------- 全局 ----------
 
@@ -71,18 +72,26 @@ static std::wstring get_selected_path() {
     return path;
 }
 
-static bool ensure_path_selected() {
+// 传 hWnd 作为 owner，MessageBox 即模态：主窗口被禁用，直到消息框关闭
+static bool ensure_path_selected(HWND hWnd) {
     std::wstring path = get_selected_path();
     if (path.empty()) {
-        MessageBoxW(NULL, L"请先选择或输入联想云教室控制台安装路径。", L"提示", MB_OK | MB_ICONWARNING);
+        MessageBoxW(hWnd, L"请先选择或输入联想云教室控制台安装路径。", L"提示",
+                    MB_OK | MB_ICONWARNING | MB_TOPMOST);
         return false;
     }
     DWORD attr = GetFileAttributesW(path.c_str());
     if (attr == INVALID_FILE_ATTRIBUTES || !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
-        MessageBoxW(NULL, L"路径不存在或不是目录，请检查后重试。", L"提示", MB_OK | MB_ICONWARNING);
+        MessageBoxW(hWnd, L"路径不存在或不是目录，请检查后重试。", L"提示",
+                    MB_OK | MB_ICONWARNING | MB_TOPMOST);
         return false;
     }
     return true;
+}
+
+static void apply_topmost(HWND hWnd, bool topmost) {
+    SetWindowPos(hWnd, topmost ? HWND_TOPMOST : HWND_NOTOPMOST,
+                 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 }
 
 // ---------- 输入密码对话框 ----------
@@ -164,14 +173,15 @@ static bool prompt_password(HWND hWnd, std::wstring& out) {
     int dlgY = rcParent.top + (rcParent.bottom - rcParent.top - dlgH) / 2;
 
     HWND hDlg = CreateWindowExW(
-        WS_EX_DLGMODALFRAME,
+        WS_EX_DLGMODALFRAME | WS_EX_TOPMOST,
         L"PWInputDlg", L"重置密码",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
         dlgX, dlgY, dlgW, dlgH,
         hWnd, NULL, g_hInst, NULL);
 
     if (!hDlg) {
-        MessageBoxW(hWnd, L"创建输入框失败", L"错误", MB_OK | MB_ICONERROR);
+        MessageBoxW(hWnd, L"创建输入框失败", L"错误",
+                    MB_OK | MB_ICONERROR | MB_TOPMOST);
         return false;
     }
 
@@ -214,17 +224,18 @@ static void on_browse(HWND hWnd) {
 
 static void on_reset_password(HWND hWnd) {
     clear_output();
-    if (!ensure_path_selected()) return;
+    if (!ensure_path_selected(hWnd)) return;
 
     std::wstring dir = get_selected_path();
     std::wstring pub_path = join_path(dir, L"wfbspubkey.bin");
     std::wstring out_path = join_path(dir, L"wfpwd.bin");
+    std::wstring copy_path = join_path(dir, L"wfpwdcpy.bin");
 
     if (GetFileAttributesW(pub_path.c_str()) == INVALID_FILE_ATTRIBUTES) {
         MessageBoxW(hWnd,
                     L"未找到 wfbspubkey.bin，请确认选择的路径是联想云教室控制台安装目录。",
                     L"重置密码失败",
-                    MB_OK | MB_ICONERROR);
+                    MB_OK | MB_ICONERROR | MB_TOPMOST);
         return;
     }
 
@@ -236,32 +247,43 @@ static void on_reset_password(HWND hWnd) {
         std::string password = wstring_to_utf8(newpwd);
         std::vector<unsigned char> cipher = cng_encrypt(pub_der, password);
         std::string hex = bytes_to_hex(cipher);
+
         write_file_w(out_path, hex + "\n", true);
+
+        bool copy_updated = false;
+        if (GetFileAttributesW(copy_path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            write_file_w(copy_path, hex + "\n", true);
+            copy_updated = true;
+        }
 
         append_output(L"重置密码成功");
         append_output(L"新密码: " + newpwd);
         append_output(L"已写入: wfpwd.bin");
+        if (copy_updated) {
+            append_output(L"已写入: wfpwdcpy.bin");
+        }
     } catch (const std::exception& ex) {
         std::string msg = ex.what();
-        MessageBoxA(hWnd, msg.c_str(), "重置密码失败", MB_OK | MB_ICONERROR);
+        MessageBoxA(hWnd, msg.c_str(), "重置密码失败",
+                    MB_OK | MB_ICONERROR | MB_TOPMOST);
     }
 }
 
 static void on_read_password(HWND hWnd) {
     clear_output();
-    if (!ensure_path_selected()) return;
+    if (!ensure_path_selected(hWnd)) return;
     std::wstring dir = get_selected_path();
     std::wstring pri_path = join_path(dir, L"wfbsprikey.bin");
     std::wstring in_path = join_path(dir, L"wfpwd.bin");
 
     if (GetFileAttributesW(pri_path.c_str()) == INVALID_FILE_ATTRIBUTES) {
         MessageBoxW(hWnd, L"未找到 wfbsprikey.bin，请确认选择的路径正确。",
-                    L"读取密码失败", MB_OK | MB_ICONERROR);
+                    L"读取密码失败", MB_OK | MB_ICONERROR | MB_TOPMOST);
         return;
     }
     if (GetFileAttributesW(in_path.c_str()) == INVALID_FILE_ATTRIBUTES) {
         MessageBoxW(hWnd, L"未找到 wfpwd.bin，请先重置密码。",
-                    L"读取密码失败", MB_OK | MB_ICONERROR);
+                    L"读取密码失败", MB_OK | MB_ICONERROR | MB_TOPMOST);
         return;
     }
 
@@ -275,32 +297,35 @@ static void on_read_password(HWND hWnd) {
         append_output(L"当前密码: " + std::wstring(text.begin(), text.end()));
     } catch (const std::exception& ex) {
         std::string msg = ex.what();
-        MessageBoxA(hWnd, msg.c_str(), "读取密码失败", MB_OK | MB_ICONERROR);
+        MessageBoxA(hWnd, msg.c_str(), "读取密码失败",
+                    MB_OK | MB_ICONERROR | MB_TOPMOST);
     }
 }
 
 static void on_username(HWND hWnd) {
     clear_output();
-    if (!ensure_path_selected()) return;
+    if (!ensure_path_selected(hWnd)) return;
     std::wstring dir = get_selected_path();
     std::wstring ini_path = join_path(dir, L"BSSvrCfg.ini");
 
     if (GetFileAttributesW(ini_path.c_str()) == INVALID_FILE_ATTRIBUTES) {
         MessageBoxW(hWnd, L"未找到 BSSvrCfg.ini，请确认选择的路径正确。",
-                    L"读取失败", MB_OK | MB_ICONERROR);
+                    L"读取失败", MB_OK | MB_ICONERROR | MB_TOPMOST);
         return;
     }
 
     try {
         std::string user = read_mag_username(ini_path);
         if (user.empty()) {
-            MessageBoxW(hWnd, L"未找到 MagUserName 或值为空。", L"提示", MB_OK | MB_ICONWARNING);
+            MessageBoxW(hWnd, L"未找到 MagUserName 或值为空。", L"提示",
+                        MB_OK | MB_ICONWARNING | MB_TOPMOST);
             return;
         }
         append_output(L"MagUserName: " + std::wstring(user.begin(), user.end()));
     } catch (const std::exception& ex) {
         std::string msg = ex.what();
-        MessageBoxA(hWnd, msg.c_str(), "读取失败", MB_OK | MB_ICONERROR);
+        MessageBoxA(hWnd, msg.c_str(), "读取失败",
+                    MB_OK | MB_ICONERROR | MB_TOPMOST);
     }
 }
 
@@ -347,16 +372,23 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                       WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                       15, 225, 120, 32, hWnd, (HMENU)IDC_BTN_USERNAME, g_hInst, NULL);
 
+        HWND hCheckTop = CreateWindowW(L"BUTTON", L"顶置窗口",
+                      WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+                      15, 270, 120, 24, hWnd, (HMENU)IDC_CHECK_TOPMOST, g_hInst, NULL);
+        SendMessageW(hCheckTop, BM_SETCHECK, BST_CHECKED, 0);
+
         g_hEditOutput = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
                       WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_AUTOVSCROLL |
                       ES_READONLY | WS_VSCROLL,
                       150, 145, 435, 195, hWnd, (HMENU)IDC_EDIT_OUTPUT, g_hInst, NULL);
 
         HWND controls[] = { hTitle1, hTitle2, hStatic, g_hEditPath, hBtnBrowse,
-                            hBtnReset, hBtnRead, hBtnUser, g_hEditOutput };
+                            hBtnReset, hBtnRead, hBtnUser, hCheckTop, g_hEditOutput };
         for (int i = 0; i < sizeof(controls) / sizeof(controls[0]); ++i) {
             SendMessageW(controls[i], WM_SETFONT, (WPARAM)g_hFont, TRUE);
         }
+
+        apply_topmost(hWnd, true);
 
         return 0;
     }
@@ -366,6 +398,13 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         else if (id == IDC_BTN_ENCRYPT) on_reset_password(hWnd);
         else if (id == IDC_BTN_DECRYPT) on_read_password(hWnd);
         else if (id == IDC_BTN_USERNAME) on_username(hWnd);
+        else if (id == IDC_CHECK_TOPMOST) {
+            if (HIWORD(wParam) == BN_CLICKED) {
+                bool checked = (SendMessageW(
+                    GetDlgItem(hWnd, IDC_CHECK_TOPMOST), BM_GETCHECK, 0, 0) == BST_CHECKED);
+                apply_topmost(hWnd, checked);
+            }
+        }
         return 0;
     }
     case WM_DESTROY:
@@ -407,7 +446,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     int y = (screenH - winH) / 2;
 
     HWND hWnd = CreateWindowExW(
-        0, L"LenovoEduCloudPWSetGUI",
+        WS_EX_TOPMOST,
+        L"LenovoEduCloudPWSetGUI",
         L"LenovoEduCloudPWSet " APP_VERSION_W,
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         x, y, winW, winH,

@@ -15,9 +15,6 @@ set RES=app.rc
 set CLI_LIBS=bcrypt.lib
 set GUI_LIBS=bcrypt.lib user32.lib gdi32.lib comctl32.lib shell32.lib ole32.lib
 
-REM ============================================================
-REM  编译 x86
-REM ============================================================
 echo.
 echo ############################################
 echo #  building x86
@@ -33,20 +30,17 @@ if errorlevel 1 goto :fail
 echo.
 echo === [x86] CLI ===
 cl /nologo /O2 /GL /EHsc /MT /DUNICODE /D_UNICODE %CLI_SRC% app.res ^
-   /link /LTCG /OPT:REF /OPT:ICF %CLI_LIBS% /SUBSYSTEM:CONSOLE /OUT:LenovoEduCloudPWSet.exe
+   /link /LTCG /OPT:REF /OPT:ICF /MANIFEST:NO %CLI_LIBS% /SUBSYSTEM:CONSOLE /OUT:LenovoEduCloudPWSet.exe
 if errorlevel 1 goto :fail
 del /Q *.obj >nul 2>nul
 
 echo.
 echo === [x86] GUI ===
 cl /nologo /O2 /GL /EHsc /MT /DUNICODE /D_UNICODE %GUI_SRC% app.res ^
-   /link /LTCG /OPT:REF /OPT:ICF %GUI_LIBS% /SUBSYSTEM:WINDOWS /OUT:LenovoEduCloudPWSet_GUI.exe
+   /link /LTCG /OPT:REF /OPT:ICF /MANIFEST:NO %GUI_LIBS% /SUBSYSTEM:WINDOWS /OUT:LenovoEduCloudPWSet_GUI.exe
 if errorlevel 1 goto :fail
 del /Q *.obj >nul 2>nul
 
-REM ============================================================
-REM  编译 x64
-REM ============================================================
 echo.
 echo ############################################
 echo #  building x64
@@ -62,22 +56,19 @@ if errorlevel 1 goto :fail
 echo.
 echo === [x64] CLI ===
 cl /nologo /O2 /GL /EHsc /MT /DUNICODE /D_UNICODE %CLI_SRC% app.res ^
-   /link /LTCG /OPT:REF /OPT:ICF %CLI_LIBS% /SUBSYSTEM:CONSOLE /OUT:LenovoEduCloudPWSet64.exe
+   /link /LTCG /OPT:REF /OPT:ICF /MANIFEST:NO %CLI_LIBS% /SUBSYSTEM:CONSOLE /OUT:LenovoEduCloudPWSet64.exe
 if errorlevel 1 goto :fail
 del /Q *.obj >nul 2>nul
 
 echo.
 echo === [x64] GUI ===
 cl /nologo /O2 /GL /EHsc /MT /DUNICODE /D_UNICODE %GUI_SRC% app.res ^
-   /link /LTCG /OPT:REF /OPT:ICF %GUI_LIBS% /SUBSYSTEM:WINDOWS /OUT:LenovoEduCloudPWSet_GUI64.exe
+   /link /LTCG /OPT:REF /OPT:ICF /MANIFEST:NO %GUI_LIBS% /SUBSYSTEM:WINDOWS /OUT:LenovoEduCloudPWSet_GUI64.exe
 if errorlevel 1 goto :fail
 del /Q *.obj >nul 2>nul
 
 del /Q app.res >nul 2>nul
 
-REM ============================================================
-REM  完成
-REM ============================================================
 echo.
 echo ========================================
 echo  build ok

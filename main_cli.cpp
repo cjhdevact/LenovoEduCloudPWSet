@@ -5,6 +5,13 @@
 #include <vector>
 #include <string>
 
+static std::wstring parent_dir_of(const std::wstring& path) {
+    size_t pos = path.find_last_of(L"\\/");
+    if (pos == std::wstring::npos) return L".";
+    if (pos == 0) return path.substr(0, 1);
+    return path.substr(0, pos);
+}
+
 static void print_usage() {
     std::cout <<
         "Usage:\n"
@@ -72,13 +79,25 @@ int wmain(int argc, wchar_t** argv) {
             std::string pwd_utf8 = wstring_to_utf8(password);
             std::vector<unsigned char> cipher = cng_encrypt(pub_der, pwd_utf8);
             std::string hex = bytes_to_hex(cipher);
-            write_file_w(output_file, hex + "\n", false);
+            write_file_w(output_file, hex + "\n", true);
+
+            // 同目录下存在 wfpwdcpy.bin 时一并写入相同密文
+            std::wstring out_dir = parent_dir_of(output_file);
+            std::wstring copy_path = join_path(out_dir, L"wfpwdcpy.bin");
+            bool copy_updated = false;
+            if (GetFileAttributesW(copy_path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                write_file_w(copy_path, hex + "\n", true);
+                copy_updated = true;
+            }
 
             std::cout << "pubkey: " << file_name_utf8(key_file) << "\n";
             std::cout << "password: " << pwd_utf8 << "\n";
             std::cout << "cipher len: " << cipher.size() << " bytes\n";
             std::cout << "cipher hex: " << hex << "\n";
             std::cout << "written: " << file_name_utf8(output_file) << "\n";
+            if (copy_updated) {
+                std::cout << "written: " << file_name_utf8(copy_path) << "\n";
+            }
             return 0;
         }
 
